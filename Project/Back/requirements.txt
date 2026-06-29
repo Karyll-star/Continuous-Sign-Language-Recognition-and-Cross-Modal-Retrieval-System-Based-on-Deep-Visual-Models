@@ -17,8 +17,10 @@ aiofiles==23.2.1
 
 # ==================== 深度学习依赖（手语识别） ====================
 # PyTorch（根据 CUDA 版本选择合适的版本）
-torch==2.1.0
-torchvision==0.16.0
+# 注意：torch 必须 >= 2.3，否则 transformers>=4.4x 会因缺少
+# torch.utils._pytree.register_pytree_node 而在 import 阶段报 AttributeError。
+torch==2.3.1
+torchvision==0.18.1
 
 # 数据处理
 numpy==1.26.3
@@ -33,10 +35,12 @@ huggingface_hub>=0.34.0,<1.0.0
 # 图像处理
 Pillow==10.2.0
 # 使用较新版本以支持 Python 3.13
-opencv-python>=4.13.0.90
+##opencv-python>=4.13.0.90
+opencv-python==4.10.0.84
 
 # 数据集
-datasets==2.14.0
+# 2.14.0 在 pyarrow>=15 上因 PyExtensionType 被移除而报错，需用新版本。
+datasets==5.0.0
 
 # 进度条
 tqdm==4.66.1

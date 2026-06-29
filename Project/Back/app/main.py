@@ -336,6 +336,39 @@ async def health():
     """健康检查"""
     return {"code": 200, "message": "success", "data": {"status": "healthy"}}
 
+
+@app.get("/api/v1/models")
+async def list_models():
+    """
+    返回当前可用的模型列表及状态
+    供前端探测和状态展示
+    """
+    models = [
+        {
+            "id": "ctc_resnet18_bilstm",
+            "name": "CTC ResNet18 + BiLSTM",
+            "type": "sign_language_recognition",
+            "status": "available",
+            "description": "端到端连续手语识别模型（CTC 序列对齐）",
+        },
+        {
+            "id": "bge_small_zh",
+            "name": "BGE-small-zh-v1.5",
+            "type": "text_embedding",
+            "status": "available",
+            "description": "中文句向量模型，用于文本-视频跨模态检索",
+        },
+        {
+            "id": "resnet_recognizer",
+            "name": "ResNet Image Recognizer",
+            "type": "image_recognition",
+            "status": "available" if RECOGNIZER_AVAILABLE else "unavailable",
+            "description": "基于 ResNet 的图像手语识别",
+        },
+    ]
+    return {"code": 200, "message": "success", "data": {"models": models}}
+
+
 @app.get("/api/v1/dictionary/search")
 async def search_dictionary(
     query: str = "",
@@ -465,7 +498,7 @@ import numpy as np
 
 # 尝试导入旧的 ResNet 识别模块（仅用于 /api/v1/recognize/image）
 try:
-    from recognizer import SignLanguageRecognizer, get_recognizer  # type: ignore
+    from .recognizer import SignLanguageRecognizer, get_recognizer  # type: ignore
     RECOGNIZER_AVAILABLE = True
     print("[main] ResNet 识别模块已成功导入（/api/v1/recognize/image 可用）")
 except ImportError:
@@ -830,6 +863,14 @@ async def video_rag_search(
         results = index.search(query=query, top_k=top_k)
         took = int(time.time() * 1000) - start
 
+        # 降级模式：索引未就绪
+        if results and results[0].get("id") == "__degraded__":
+            return {
+                "code": 200,
+                "message": results[0].get("sentence", "索引未就绪"),
+                "data": {"results": [], "total": 0, "took_ms": took, "query": query},
+            }
+
         return {
             "code": 200,
             "message": "success",
@@ -863,6 +904,14 @@ async def video_rag_random(limit: int = 10):
         index = get_video_rag_index_dev()
         results = index.get_random(limit=limit)
         took = int(time.time() * 1000) - start
+
+        # 降级模式：索引未就绪
+        if results and results[0].get("id") == "__degraded__":
+            return {
+                "code": 200,
+                "message": results[0].get("sentence", "索引未就绪"),
+                "data": {"results": [], "total": 0, "took_ms": took},
+            }
 
         return {
             "code": 200,

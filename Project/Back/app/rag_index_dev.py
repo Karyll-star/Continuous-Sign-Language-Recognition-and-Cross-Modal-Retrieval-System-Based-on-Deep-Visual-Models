@@ -30,12 +30,29 @@ class VideoRAGIndexDev:
         emb_path = os.path.join(index_dir, f"embeddings_{split}.npy")
         meta_path = os.path.join(index_dir, f"metadata_{split}.json")
 
-        if not os.path.exists(emb_path) or not os.path.exists(meta_path):
-            raise FileNotFoundError(
-                "未找到 dev 索引文件，请先运行 scripts/build_cecsl_index.py 构建索引。\n"
-                f"缺失文件: {emb_path if not os.path.exists(emb_path) else ''} "
-                f"{meta_path if not os.path.exists(meta_path) else ''}"
+        self._degraded = False
+        self._degraded_reason = ""
+
+        missing = []
+        if not os.path.exists(emb_path):
+            missing.append(emb_path)
+        if not os.path.exists(meta_path):
+            missing.append(meta_path)
+
+        if missing:
+            self._degraded = True
+            self._degraded_reason = (
+                f"索引文件缺失，请先运行 scripts/build_cecsl_index.py 构建索引。"
+                f"缺失文件: {', '.join(missing)}"
             )
+            print(f"[VideoRAGIndexDev] 警告: {self._degraded_reason}")
+            self.embeddings = np.empty((0, 0))
+            self.samples = []
+            self.model_name = "BAAI/bge-small-zh-v1.5"
+            self.data_root = ""
+            self.video_base_url = os.getenv("CECSL_VIDEO_BASE_URL", "/cecsl/video")
+            self._model = None
+            return
 
         self.embeddings: np.ndarray = np.load(emb_path)
         with open(meta_path, "r", encoding="utf-8") as f:
@@ -74,6 +91,10 @@ class VideoRAGIndexDev:
 
     def encode_query(self, query: str) -> np.ndarray:
         """编码查询句子为归一化向量"""
+        if self._degraded:
+            raise RuntimeError(
+                f"索引未就绪，无法编码查询。{self._degraded_reason}"
+            )
         if not query or not query.strip():
             raise ValueError("query 不能为空")
 
@@ -94,6 +115,16 @@ class VideoRAGIndexDev:
 
     def search(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
         """基于余弦相似度的简单向量检索"""
+        if self._degraded:
+            return [
+                {
+                    "id": "__degraded__",
+                    "sentence": self._degraded_reason,
+                    "gloss": "",
+                    "note": "",
+                }
+            ]
+
         query_vec = self.encode_query(query)
 
         # 由于向量已归一化，点积即为余弦相似度
@@ -134,6 +165,22 @@ class VideoRAGIndexDev:
 
     def get_random(self, limit: int = 10) -> List[Dict[str, Any]]:
         """返回随机样本，用于首页推荐"""
+        if self._degraded:
+            return [
+                {
+                    "id": "__degraded__",
+                    "sentence": self._degraded_reason,
+                    "gloss": "",
+                    "note": "",
+                    "split": "",
+                    "videoPath": "",
+                    "videoAbsPath": "",
+                    "videoUrl": "",
+                    "similarity": 0,
+                    "rank": 1,
+                }
+            ]
+
         n = len(self.samples)
         if n == 0:
             return []
@@ -174,4 +221,3 @@ def get_video_rag_index_dev() -> VideoRAGIndexDev:
     """全局单例（dev 固定）"""
     index_dir = os.getenv("CECSL_INDEX_DIR", "data/cecsl_index")
     return VideoRAGIndexDev(index_dir=index_dir, split="dev")
-

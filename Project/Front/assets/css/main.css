@@ -189,6 +189,11 @@
 }
 
 @layer utilities {
+  /* ==================== 渐变背景 ==================== */
+  .bg-accent-gradient {
+    background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+  }
+
   /* ==================== 动画工具类 ==================== */
   .animate-fade-in {
     animation: fadeIn 0.4s ease-out forwards;
@@ -234,5 +239,4 @@
     display: none;
   }
 }
-
 

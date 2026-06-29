@@ -23,7 +23,10 @@ import cv2
 # ==================== 路径与依赖 ====================
 
 # AAA 工程根目录（已包含 CTC 模型与推理脚本）
-AAA_ROOT = r"D:\Aprogress\Shen\AAA"
+# 相对仓库根自动定位，避免硬编码绝对路径导致换机器失效。
+# 本文件位于 <repo>/Project/Back/app/ctc_service.py，往上三级即仓库根，AAA 在其下。
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+AAA_ROOT = os.environ.get("AAA_ROOT", os.path.join(_REPO_ROOT, "AAA"))
 if AAA_ROOT not in sys.path:
     sys.path.insert(0, AAA_ROOT)
 
@@ -45,7 +48,15 @@ class CTCConfig:
     """CTC 推理配置"""
 
     # 使用 Back 下的 checkpoint，方便部署时只依赖 Back 目录
-    checkpoint_path: str = r"D:\Aprogress\Shen\Project\Back\model\last_checkpoint.pt"
+    # <repo>/Project/Back/app/ctc_service.py -> 往上两级即 Back，model 在其下。
+    checkpoint_path: str = os.environ.get(
+        "CTC_CHECKPOINT",
+        os.path.join(
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
+            "model",
+            "last_checkpoint.pt",
+        ),
+    )
 
 
 cfg = CTCConfig()

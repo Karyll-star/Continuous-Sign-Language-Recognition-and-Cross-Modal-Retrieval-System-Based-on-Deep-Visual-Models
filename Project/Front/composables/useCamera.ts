@@ -67,20 +67,15 @@ export function useCamera() {
 
   // 捕获当前帧
   function captureFrame(): string | null {
-    if (!videoRef.value || !canvasRef.value) {
+    if (!videoRef.value) {
       return null
     }
 
-    const video = videoRef.value
-    const canvas = canvasRef.value
-    const ctx = canvas.getContext('2d')
-
-    if (!ctx) {
-      return null
-    }
-
+    const video = videoRef.value as HTMLVideoElement
+    const canvas = document.createElement('canvas')
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')!
 
     // 如果镜像，水平翻转绘制
     if (isMirrored.value) {
@@ -121,5 +116,3 @@ export function useCamera() {
     setVideoRef,
   }
 }
-
-

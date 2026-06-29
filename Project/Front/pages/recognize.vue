@@ -167,7 +167,7 @@
     </div>
 
     <!-- 控制栏 -->
-    <div class="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-gray-900 to-gray-900/80 backdrop-blur-xl pb-8 pt-4 px-4">
+    <div class="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-gray-900 to-gray-900/80 backdrop-blur-xl pb-8 pt-4 px-4">
       <div class="max-w-md mx-auto">
         <div class="flex items-center justify-center gap-4">
           <!-- 镜像切换 -->
@@ -207,11 +207,11 @@
     <!-- 识别结果面板 -->
     <div 
       class="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-20 transition-transform duration-300"
-      :class="showResultPanel ? 'translate-y-0' : 'translate-y-[calc(100%-120px)]'"
+      :class="showResultPanel ? 'translate-y-0' : 'translate-y-full'"
     >
       <!-- 拖拽指示器 -->
       <div 
-        class="flex justify-center py-3 cursor-pointer"
+        class="flex justify-center py-3 cursor-pointer z-30"
         @click="toggleResultPanel"
       >
         <div class="w-16 h-1.5 bg-gray-300 rounded-full"></div>
@@ -310,7 +310,7 @@ const speech = useSpeech()
 
 // 状态
 const loading = ref(true)
-const showResultPanel = ref(true)
+const showResultPanel = ref(false)
 const recordingDuration = ref('00:00')
 const isRequesting = ref(false)
 let lastCaptureTime = 0
@@ -367,10 +367,22 @@ function toggleFullscreen() {
 // 初始化摄像头
 async function initCamera() {
   loading.value = true
+  // 确保 video 元素已挂载
+  const videoEl = videoRef.value
+  if (!videoEl) {
+    await nextTick()
+    // 再次尝试
+    if (!videoRef.value) {
+      camera.error.value = '视频元素未能正确加载，请刷新页面重试'
+      loading.value = false
+      return
+    }
+  }
   try {
-    await camera.startCamera(videoRef.value || undefined)
+    await camera.startCamera(videoRef.value as HTMLVideoElement)
   } catch (error) {
     console.error('Camera initialization failed:', error)
+    camera.error.value = (error as Error).message || '摄像头初始化失败'
   }
   loading.value = false
 }
@@ -390,6 +402,10 @@ async function toggleRecording() {
     recordingDuration.value = '00:00'
   } else {
     await initCamera()
+    if (camera.error.value) {
+      toast.error(camera.error.value)
+      return
+    }
     recognitionStore.setRecording(true)
     startCaptureLoop()
     
@@ -554,6 +570,11 @@ function captureAndSave() {
     toast.success('已保存到历史记录')
   }
 }
+
+// 页面加载后自动请求摄像头
+onMounted(() => {
+  initCamera()
+})
 
 // 页面卸载时清理
 onUnmounted(() => {

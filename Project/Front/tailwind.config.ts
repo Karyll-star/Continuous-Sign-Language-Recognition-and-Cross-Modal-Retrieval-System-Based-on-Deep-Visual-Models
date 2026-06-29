@@ -1,12 +1,12 @@
-/** @type {import('tailwindcss').Config} */
-module.exports = {
+import type { Config } from 'tailwindcss'
+export default {
   content: [
     './components/**/*.{js,vue,ts}',
     './layouts/**/*.vue',
     './pages/**/*.vue',
     './plugins/**/*.{js,ts}',
     './app.vue',
-    './error.vue',
+    './error.vue'
   ],
   theme: {
     extend: {
@@ -31,7 +31,7 @@ module.exports = {
         accent: {
           DEFAULT: '#6366F1',
           light: '#A5B4FC',
-          gradient: 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%)',
+          gradient: '#6366F1',
         },
         // 功能色
         success: {
@@ -119,5 +119,4 @@ module.exports = {
     },
   },
   plugins: [],
-}
-
+} satisfies Config

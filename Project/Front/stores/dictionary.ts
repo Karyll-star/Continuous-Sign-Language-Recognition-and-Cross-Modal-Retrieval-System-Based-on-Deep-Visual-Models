@@ -1,30 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-
-// 类型定义
-export interface Word {
-  id: string
-  chinese: string
-  pinyin: string
-  meaning: string
-  category: string
-  videoUrl?: string
-  thumbnailUrl?: string
-  example?: string
-  gesturePoints?: string[]
-  relatedWords?: string[]
-  score?: number
-  searchType?: string
-  createdAt?: string
-  updatedAt?: string
-}
-
-export interface WordCategory {
-  id: string
-  name: string
-  icon: string
-  wordCount: number
-}
+import type { Word, WordCategory } from '~/types'
+export type { Word, WordCategory }
 
 export const useDictionaryStore = defineStore('dictionary', () => {
   // 状态
