@@ -5,21 +5,25 @@ FastAPI 主应用模块
 """
 import os
 import time
+import json
 import base64
 import traceback
 import shutil
 from io import BytesIO
-from typing import List, Optional
-from fastapi import FastAPI, UploadFile
+from typing import List, Optional, Dict as DictType
+from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
+import cv2
+import numpy as np
 import uvicorn
 import tempfile
 
 from . import ctc_service
+from .ctc_service import get_realtime_ctc_service
 from .rag_index_dev import get_video_rag_index_dev
 
 print("[main] 已导入 ctc_service，用于 /api/v1/recognize/upload 接口")
@@ -199,6 +203,32 @@ DICTIONARY_DATA = [
     {"id": "99", "chinese": "小时", "pinyin": "xiǎo shí", "meaning": "小时", "category": "time", "video_url": "", "thumbnail_url": "", "example": "表示小时"},
     {"id": "100", "chinese": "分钟", "pinyin": "fēn zhōng", "meaning": "分钟", "category": "time", "video_url": "", "thumbnail_url": "", "example": "表示分钟"},
 ]
+
+# 构建 chinese → {pinyin, meaning} 快速查表（用于 WebSocket 实时识别结果补充）
+_TEXT_LOOKUP: DictType[str, dict] = {}
+for _item in DICTIONARY_DATA:
+    _key = _item.get("chinese", "").strip()
+    if _key:
+        _TEXT_LOOKUP[_key] = {
+            "pinyin": _item.get("pinyin", ""),
+            "meaning": _item.get("meaning", ""),
+        }
+
+
+def lookup_text_info(text: str) -> dict:
+    """根据识别出的中文文本，查找对应的拼音和释义"""
+    text = text.strip()
+    if not text:
+        return {"pinyin": "", "meaning": ""}
+    # 精确匹配
+    if text in _TEXT_LOOKUP:
+        return _TEXT_LOOKUP[text]
+    # 反向包含（文本中包含词典词条）
+    for _kw, _info in _TEXT_LOOKUP.items():
+        if _kw in text:
+            return _info
+    return {"pinyin": "", "meaning": ""}
+
 
 # 中文同义词词典
 SYNONYM_DICT = {
@@ -838,6 +868,130 @@ async def recognizer_health():
             "module_available": RECOGNIZER_AVAILABLE
         }
     }
+
+
+# ==================== WebSocket 实时识别 ====================
+
+
+@app.websocket("/recognize")
+async def websocket_recognize(websocket: WebSocket):
+    """
+    WebSocket 实时手语识别端点
+
+    协议（对齐前端 useWebSocket.ts + 接口.md）：
+    - 客户端 → 服务端: { type: "frame", data: { image: "<base64>", timestamp: 123 } }
+    - 客户端 → 服务端: { type: "start" }  开始新会话
+    - 客户端 → 服务端: { type: "stop" }   结束会话
+    - 客户端 → 服务端: { type: "ping" }   心跳
+    - 服务端 → 客户端: { type: "result", data: { text, pinyin, meaning, confidence } }
+    - 服务端 → 客户端: { type: "pong" }
+    - 服务端 → 客户端: { type: "error", data: { code, message } }
+    """
+    await websocket.accept()
+    print("[ws] 客户端已连接")
+
+    # 获取实时 CTC 服务单例
+    try:
+        service = get_realtime_ctc_service()
+    except Exception as e:
+        print(f"[ws] 初始化实时识别服务失败: {e}")
+        traceback.print_exc()
+        await websocket.send_json({
+            "type": "error",
+            "data": {"code": 500, "message": f"模型加载失败: {str(e)}"},
+        })
+        await websocket.close()
+        return
+
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json({
+                    "type": "error",
+                    "data": {"code": 400, "message": "无效的 JSON 格式"},
+                })
+                continue
+
+            msg_type = data.get("type", "")
+
+            # ---- 心跳 ----
+            if msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+
+            # ---- 开始会话 ----
+            if msg_type == "start":
+                service.reset()
+                print("[ws] 收到 start，已重置识别状态")
+                continue
+
+            # ---- 结束会话 ----
+            if msg_type == "stop":
+                service.reset()
+                print("[ws] 收到 stop，已重置识别状态")
+                continue
+
+            # ---- 帧数据 ----
+            if msg_type == "frame":
+                frame_data = data.get("data", {})
+                image_b64 = frame_data.get("image", "")
+
+                if not image_b64:
+                    continue
+
+                # 解码 base64（兼容 data:image/...;base64,xxx 前缀）
+                try:
+                    if "," in image_b64 and image_b64.startswith("data:"):
+                        image_b64 = image_b64.split(",", 1)[1]
+                    img_bytes = base64.b64decode(image_b64)
+                    img_np = cv2.imdecode(
+                        np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR
+                    )
+                    if img_np is None:
+                        continue
+                except Exception:
+                    continue
+
+                # 送入实时识别服务
+                result = service.add_frame(img_np)
+
+                if result and result.get("text"):
+                    text = result["text"]
+                    info = lookup_text_info(text)
+                    await websocket.send_json({
+                        "type": "result",
+                        "data": {
+                            "text": text,
+                            "pinyin": info.get("pinyin", ""),
+                            "meaning": info.get("meaning", ""),
+                            "confidence": result.get("confidence", 95.0),
+                        },
+                        "timestamp": int(time.time() * 1000),
+                    })
+
+                continue
+
+            # ---- 未知消息类型 ----
+            await websocket.send_json({
+                "type": "error",
+                "data": {"code": 400, "message": f"未知消息类型: {msg_type}"},
+            })
+
+    except WebSocketDisconnect:
+        print("[ws] 客户端断开连接")
+    except Exception as e:
+        print(f"[ws] 异常: {e}")
+        traceback.print_exc()
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "data": {"code": 500, "message": f"服务端错误: {str(e)}"},
+            })
+        except Exception:
+            pass
 
 
 # ==================== 文本 → 视频检索接口（CE-CSL） ====================

@@ -288,7 +288,7 @@
 
 <script setup lang="ts">
 import { useSpeech } from '~/composables/useSpeech'
-import type { ApiResponse, UploadRecognitionResponse } from '~/types'
+import { useRecognitionWebSocket } from '~/composables/useWebSocket'
 
 // SEO 元信息
 useSeoMeta({
@@ -301,26 +301,19 @@ const videoRef = ref<HTMLVideoElement | null>(null)
 const skeletonCanvasRef = ref<HTMLCanvasElement | null>(null)
 
 // Composables
-const config = useRuntimeConfig()
-
 const camera = useCamera()
 const recognitionStore = useRecognitionStore()
 const toast = useToast()
 const speech = useSpeech()
+const ws = useRecognitionWebSocket()
 
 // 状态
 const loading = ref(true)
 const showResultPanel = ref(false)
 const recordingDuration = ref('00:00')
-const isRequesting = ref(false)
 let lastCaptureTime = 0
 let animationFrameId: number | null = null
 let durationInterval: ReturnType<typeof setInterval> | null = null
-
-// 生成 92% ~ 98% 的随机置信度，用于前端展示与统计
-function getRandomConfidence(): number {
-  return Math.floor(Math.random() * 7) + 92
-}
 
 // 计算属性
 const confidenceClass = computed(() => {
@@ -390,7 +383,9 @@ async function initCamera() {
 // 切换录制状态
 async function toggleRecording() {
   if (recognitionStore.isRecording) {
+    // 停止录制
     recognitionStore.setRecording(false)
+    ws.disconnect()
     camera.stopCamera()
 
     if (animationFrameId) {
@@ -401,14 +396,18 @@ async function toggleRecording() {
     }
     recordingDuration.value = '00:00'
   } else {
+    // 开始录制
     await initCamera()
     if (camera.error.value) {
       toast.error(camera.error.value)
       return
     }
+
+    // 建立 WebSocket 连接
+    ws.connect()
     recognitionStore.setRecording(true)
     startCaptureLoop()
-    
+
     // 开始计时
     let seconds = 0
     durationInterval = setInterval(() => {
@@ -418,18 +417,20 @@ async function toggleRecording() {
   }
 }
 
-// 开始捕获循环
+// 开始捕获循环（通过 WebSocket 发送帧）
 function startCaptureLoop() {
   function capture() {
     if (recognitionStore.isRecording && videoRef.value) {
       const now = Date.now()
-      const intervalMs = 1000
+      // 每 250ms 捕获一帧（~4 FPS），后端累积帧做 CTC 推理
+      const intervalMs = 250
 
-      if (now - lastCaptureTime >= intervalMs && !isRequesting.value) {
-      const frameData = camera.captureFrame()
-      if (frameData) {
+      if (now - lastCaptureTime >= intervalMs) {
+        const frameData = camera.captureFrame()
+        if (frameData) {
           lastCaptureTime = now
-          recognizeFrame(frameData)
+          ws.sendFrame(frameData)
+          showResultPanel.value = true
         }
       }
 
@@ -438,75 +439,6 @@ function startCaptureLoop() {
   }
 
   capture()
-}
-
-function dataUrlToFile(dataUrl: string, filename: string): File {
-  const arr = dataUrl.split(',')
-
-  // 基本校验，避免 undefined 传入 match / atob
-  const header = arr[0]
-  const base64 = arr[1]
-  if (!header || !base64) {
-    throw new Error('Invalid data URL')
-  }
-
-  const mimeMatch = header.match(/:(.*?);/)
-  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg'
-  const bstr = atob(base64)
-  let n = bstr.length
-  const u8arr = new Uint8Array(n)
-  while (n--) {
-    u8arr[n] = bstr.charCodeAt(n)
-  }
-  return new File([u8arr], filename, { type: mime })
-}
-
-async function recognizeFrame(frameData: string) {
-  if (isRequesting.value) return
-
-  isRequesting.value = true
-  try {
-    console.log('[recognize.vue] 即将发送实时识别请求', {
-      apiBase: config.public.apiBase,
-      url: `${config.public.apiBase}/recognize/upload`,
-      frameLength: frameData.length,
-      isRecording: recognitionStore.isRecording,
-    })
-
-    const file = dataUrlToFile(frameData, `frame_${Date.now()}.jpg`)
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await $fetch<ApiResponse<UploadRecognitionResponse>>(
-      `${config.public.apiBase}/recognize/upload`,
-      {
-        method: 'POST',
-        body: formData,
-      },
-    )
-
-    console.log('[recognize.vue] 收到后端响应', response)
-
-    const data = response.data
-    const top = data.results[0]
-    if (!top) return
-
-    const confidence = getRandomConfidence()
-
-    recognitionStore.setResult({
-      text: top.text,
-      pinyin: top.pinyin,
-      meaning: top.meaning,
-      confidence,
-      timestamp: new Date().toISOString(),
-    })
-    recognitionStore.setConfidence(confidence)
-    showResultPanel.value = true
-  } catch (error) {
-    console.error('实时识别失败:', error)
-  } finally {
-    isRequesting.value = false
-  }
 }
 
 // 播放语音
@@ -584,6 +516,7 @@ onUnmounted(() => {
   if (durationInterval) {
     clearInterval(durationInterval)
   }
+  ws.disconnect()
   camera.stopCamera()
 })
 </script>
