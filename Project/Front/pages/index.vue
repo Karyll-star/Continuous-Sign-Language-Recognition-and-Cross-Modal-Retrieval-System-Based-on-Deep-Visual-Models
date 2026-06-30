@@ -5,6 +5,13 @@
       <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <h1 class="text-white font-semibold text-lg">🤟 译手 · 实时手语翻译</h1>
+          <NuxtLink
+            to="/video-translate"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors text-xs font-medium"
+          >
+            <i class="bi bi-film"></i>
+            <span class="hidden sm:inline">视频翻译</span>
+          </NuxtLink>
         </div>
         <div class="flex items-center gap-2">
           <button 

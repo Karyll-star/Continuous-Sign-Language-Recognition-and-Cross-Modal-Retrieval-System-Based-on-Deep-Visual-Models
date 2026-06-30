@@ -94,7 +94,6 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "个人工作总结.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +103,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "个人工作总结 的反向链接列表"
+              "title": "反向链接"
             }
           },
           {
@@ -113,12 +112,11 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "个人工作总结.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "个人工作总结 的出链列表"
+              "title": "出链"
             }
           },
           {
@@ -156,13 +154,12 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "个人工作总结.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "个人工作总结 的大纲"
+              "title": "大纲"
             }
           }
         ]
@@ -184,5 +181,23 @@
     }
   },
   "active": "b3847c6396d6cac3",
-  "lastOpenFiles": []
+  "lastOpenFiles": [
+    "uploads/video/1782835109959_拿铁_03.mkv",
+    "uploads/video/1782835098963_好_05.mkv",
+    "uploads/video/1782835088235_好_10.mkv",
+    "uploads/video/1782835076642_拿铁_01.mkv",
+    "data/custom_videos/拿铁_9.mp4",
+    "data/custom_videos/拿铁_8.mp4",
+    "data/custom_videos/拿铁_7.mp4",
+    "data/custom_videos/拿铁_6.mp4",
+    "data/custom_videos/拿铁_5.mp4",
+    "data/custom_videos/拿铁_4.mp4",
+    "data/custom_videos/拿铁_12.mp4",
+    "enhancer/错误-实时翻译简化方案.md",
+    "enhancer/LLM后处理简化方案.md",
+    "enhancer/LLM后处理优化技术架构方案.md",
+    "个人工作总结.md",
+    "Project/Back/增量训练.md",
+    "实时翻译技术文档.md"
+  ]
 }
