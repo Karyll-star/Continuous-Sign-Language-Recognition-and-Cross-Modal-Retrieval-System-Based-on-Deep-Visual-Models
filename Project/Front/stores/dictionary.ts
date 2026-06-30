@@ -50,8 +50,8 @@ export const useDictionaryStore = defineStore('dictionary', () => {
         return nuxtConfig.public.apiBase.replace(/\/$/, '')
       }
     }
-    // 后备：对齐后端 9000 端口
-    return 'http://localhost:9000/api/v1'
+    // 后备：对齐后端 8000 端口
+    return 'http://localhost:8000/api/v1'
   })
 
   // 方法

@@ -30,7 +30,10 @@ class Config:
     """路径与模型配置"""
 
     # 数据根目录
-    DATA_ROOT = r"D:\Aprogress\Shen\dataset\CE-CSL\CE-CSL"
+    DATA_ROOT = os.environ.get(
+        "CECSL_DATA_ROOT",
+        r"D:\Aprogress\Shen\dataset\CE-CSL\CE-CSL"
+    )
 
     # 子目录
     VIDEO_DIR = os.path.join(DATA_ROOT, "video")

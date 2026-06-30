@@ -72,8 +72,10 @@ class FinetuneConfig:
     CUSTOM_LABEL: str = os.path.join(DEFAULT_CUSTOM_DIR, "custom.csv")
     CUSTOM_FEATURES: str = os.path.join(DEFAULT_CUSTOM_DIR, "features")
 
-    # 预训练模型路径
-    PRETRAINED_MODEL: str = os.path.join("output", "ctc_lstm", "best_model.pt")
+    # 预训练模型路径（默认使用 Project/Back 下已验证的检查点）
+    PRETRAINED_MODEL: str = os.path.join(
+        PROJECT_ROOT, "Project", "Back", "model", "last_checkpoint.pt"
+    )
 
     # 输出
     OUTPUT_DIR: str = os.path.join("output", "ctc_lstm")
@@ -177,9 +179,10 @@ def load_and_extend_model(
     old_fc_bias = old_model_state["fc.bias"]      # (old_classes,)
 
     new_state = copy.deepcopy(old_model_state)
-    # 扩展 fc 层权重
-    new_fc_weight = torch.zeros(new_num_classes, old_fc_weight.shape[1])
-    new_fc_bias = torch.zeros(new_num_classes)
+    # 扩展 fc 层权重（与旧权重同设备）
+    dev = old_fc_weight.device
+    new_fc_weight = torch.zeros(new_num_classes, old_fc_weight.shape[1], device=dev)
+    new_fc_bias = torch.zeros(new_num_classes, device=dev)
 
     # 复制旧词权重
     new_fc_weight[:old_num_classes, :] = old_fc_weight
@@ -188,7 +191,7 @@ def load_and_extend_model(
     # 新词权重：用旧词权重的均值 + 小随机噪声初始化
     weight_mean = old_fc_weight.mean(dim=0, keepdim=True)
     weight_std = old_fc_weight.std(dim=0, keepdim=True)
-    noise = torch.randn(new_num_classes - old_num_classes, old_fc_weight.shape[1])
+    noise = torch.randn(new_num_classes - old_num_classes, old_fc_weight.shape[1], device=dev)
     new_fc_weight[old_num_classes:, :] = weight_mean + noise * weight_std * 0.1
     new_fc_bias[old_num_classes:] = 0.0
 
@@ -279,15 +282,30 @@ def main():
         default=None,
         help=f"自定义特征目录（默认: {cfg.CUSTOM_FEATURES}）",
     )
+    parser.add_argument(
+        "--skip-old-data",
+        action="store_true",
+        help="跳过 CE-CSL 旧数据混合，仅用自定义新词数据微调（无 CE-CSL 时使用）",
+    )
+    parser.add_argument(
+        "--pretrained",
+        type=str,
+        default=None,
+        help=f"预训练模型路径（默认: {cfg.PRETRAINED_MODEL}）",
+    )
     args = parser.parse_args()
 
     # 命令行参数覆盖默认值
     custom_label = args.custom_label or cfg.CUSTOM_LABEL
     custom_features_dir = args.custom_features or cfg.CUSTOM_FEATURES
+    pretrained_path = args.pretrained or cfg.PRETRAINED_MODEL
+    skip_old = args.skip_old_data
 
     print("=" * 60)
     print("增量训练：为新词汇微调手语识别模型")
     print("=" * 60)
+    if skip_old:
+        print("⚠ 跳过 CE-CSL 旧数据混合，仅用自定义新词数据微调")
 
     # ---- 1. 提取新词 ----
     if not os.path.exists(custom_label):
@@ -305,33 +323,17 @@ def main():
         return
 
     # ---- 2. 加载预训练模型并扩展词表 ----
-    print(f"\n[1/4] 加载预训练模型: {cfg.PRETRAINED_MODEL}")
+    print(f"\n[1/4] 加载预训练模型: {pretrained_path}")
     model, vocab = load_and_extend_model(
-        cfg.PRETRAINED_MODEL,
+        pretrained_path,
         new_words,
         cfg.DEVICE,
     )
 
-    # ---- 3. 构建混合数据集 ----
+    # ---- 3. 构建数据集 ----
     print(f"\n[2/4] 构建训练数据集...")
 
-    # 旧数据（抽样）
-    old_train_label = os.path.join(cfg.LABEL_DIR, "train.csv")
-    if not os.path.exists(old_train_label):
-        print(f"[错误] CE-CSL 训练标注不存在: {old_train_label}")
-        print("请设置环境变量 CECSL_DATA_ROOT 指向正确的 CE-CSL 数据集根目录")
-        return
-
-    old_train = CSLFeatureDataset(
-        features_dir=cfg.TRAIN_FEATURES,
-        label_csv=old_train_label,
-        vocab=vocab,
-        split="train",
-        max_samples=cfg.MAX_OLD_TRAIN_SAMPLES,
-    )
-    print(f"  旧训练集抽样: {len(old_train)} 条")
-
-    # 新数据
+    # 新数据（必须存在）
     if not os.path.isdir(custom_features_dir):
         print(f"\n[错误] 自定义特征目录不存在: {custom_features_dir}")
         print("请先运行: python extract_custom_features.py")
@@ -352,41 +354,76 @@ def main():
         print(f"  2. 是否已运行: python extract_custom_features.py")
         return
 
-    # 混合数据集
-    mixed_train = MixedWeightedDataset(
-        old_train, new_train, new_sample_weight=cfg.NEW_SAMPLE_WEIGHT
-    )
-    sample_weights = mixed_train.get_sample_weights()
-    sampler = torch.utils.data.WeightedRandomSampler(
-        sample_weights,
-        num_samples=len(mixed_train),
-        replacement=True,
-    )
+    if skip_old:
+        # 仅用新数据（无旧数据混合）
+        print(f"  旧训练集: 跳过（--skip-old-data）")
+        train_loader = DataLoader(
+            new_train,
+            batch_size=cfg.BATCH_SIZE,
+            shuffle=True,
+            num_workers=0,
+            collate_fn=collate_fn,
+        )
+        # 验证集也用新数据
+        val_loader = DataLoader(
+            new_train,
+            batch_size=cfg.BATCH_SIZE,
+            shuffle=False,
+            num_workers=0,
+            collate_fn=collate_fn,
+        )
+        print(f"  验证集（新数据自评）: {len(new_train)} 条")
+    else:
+        # 旧数据（抽样）
+        old_train_label = os.path.join(cfg.LABEL_DIR, "train.csv")
+        if not os.path.exists(old_train_label):
+            print(f"[错误] CE-CSL 训练标注不存在: {old_train_label}")
+            print("请设置环境变量 CECSL_DATA_ROOT 或使用 --skip-old-data")
+            return
 
-    train_loader = DataLoader(
-        mixed_train,
-        batch_size=cfg.BATCH_SIZE,
-        sampler=sampler,
-        num_workers=0,
-        collate_fn=collate_fn,
-    )
+        old_train = CSLFeatureDataset(
+            features_dir=cfg.TRAIN_FEATURES,
+            label_csv=old_train_label,
+            vocab=vocab,
+            split="train",
+            max_samples=cfg.MAX_OLD_TRAIN_SAMPLES,
+        )
+        print(f"  旧训练集抽样: {len(old_train)} 条")
 
-    # 验证集只用旧数据的抽样（评估是否遗忘）
-    val_dataset = CSLFeatureDataset(
-        features_dir=os.path.join(cfg.DATA_ROOT, "val_features"),
-        label_csv=os.path.join(cfg.LABEL_DIR, "dev.csv"),
-        vocab=vocab,
-        split="dev",
-        max_samples=cfg.MAX_OLD_VAL_SAMPLES,
-    )
-    val_loader = DataLoader(
-        val_dataset,
-        batch_size=cfg.BATCH_SIZE,
-        shuffle=False,
-        num_workers=0,
-        collate_fn=collate_fn,
-    )
-    print(f"  验证集（旧数据）: {len(val_dataset)} 条")
+        # 混合数据集
+        mixed_train = MixedWeightedDataset(
+            old_train, new_train, new_sample_weight=cfg.NEW_SAMPLE_WEIGHT
+        )
+        sample_weights = mixed_train.get_sample_weights()
+        sampler = torch.utils.data.WeightedRandomSampler(
+            sample_weights,
+            num_samples=len(mixed_train),
+            replacement=True,
+        )
+        train_loader = DataLoader(
+            mixed_train,
+            batch_size=cfg.BATCH_SIZE,
+            sampler=sampler,
+            num_workers=0,
+            collate_fn=collate_fn,
+        )
+
+        # 验证集只用旧数据的抽样（评估是否遗忘）
+        val_dataset = CSLFeatureDataset(
+            features_dir=os.path.join(cfg.DATA_ROOT, "val_features"),
+            label_csv=os.path.join(cfg.LABEL_DIR, "dev.csv"),
+            vocab=vocab,
+            split="dev",
+            max_samples=cfg.MAX_OLD_VAL_SAMPLES,
+        )
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=cfg.BATCH_SIZE,
+            shuffle=False,
+            num_workers=0,
+            collate_fn=collate_fn,
+        )
+        print(f"  验证集（旧数据）: {len(val_dataset)} 条")
 
     # ---- 4. 开始微调 ----
     print(f"\n[3/4] 开始微调 ({cfg.EPOCHS} epochs, LR={cfg.LR})")

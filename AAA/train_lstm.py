@@ -23,7 +23,10 @@ from ctc_model import TemporalConvBiLSTM, CTCTrainer
 @dataclass
 class Config:
     # 路径配置
-    DATA_ROOT: str = r"D:\Aprogress\Shen\dataset\CE-CSL\CE-CSL"
+    DATA_ROOT: str = os.environ.get(
+        "CECSL_DATA_ROOT",
+        r"D:\Aprogress\Shen\dataset\CE-CSL\CE-CSL"
+    )
     LABEL_DIR: str = os.path.join(DATA_ROOT, "label")
     TRAIN_FEATURES: str = os.path.join(DATA_ROOT, "train_features")
     VAL_FEATURES: str = os.path.join(DATA_ROOT, "val_features")
@@ -39,17 +42,17 @@ class Config:
 
     # 训练参数（正式训练）
     # - 建议根据显存大小在 4~32 之间调整 batch_size
-    BATCH_SIZE: int = 8
+    BATCH_SIZE: int = 16
     # AdamW 初始学习率 + 权重衰减（配合余弦退火与 warmup）
-    LR: float = 1e-3
+    LR: float = 1e-4
     WEIGHT_DECAY: float = 1e-4
     # 正式训练轮数
     EPOCHS: int = 250
     # 学习率 warmup 轮数（前 WARMUP_EPOCHS 采用线性 warmup）
     WARMUP_EPOCHS: int = 10
     # 早停机制配置：patience=20，且前 MIN_EPOCHS_NO_EARLY_STOP 轮绝不触发早停
-    PATIENCE: int = 20
-    MIN_EPOCHS_NO_EARLY_STOP: int = 250
+    PATIENCE: int = 15
+    MIN_EPOCHS_NO_EARLY_STOP: int = 30
     DEVICE: torch.device = torch.device(
         "cuda" if torch.cuda.is_available() else "cpu"
     )

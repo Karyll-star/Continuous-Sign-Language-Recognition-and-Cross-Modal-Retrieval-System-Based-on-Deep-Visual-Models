@@ -41,7 +41,7 @@ export const useVideoRagStore = defineStore('videoRag', () => {
         return nuxtConfig.public.apiBase.replace(/\/$/, '')
       }
     }
-    return 'http://localhost:9000/api/v1'
+    return 'http://localhost:8000/api/v1'
   })
 
   async function searchVideos(text: string, topK = 10) {

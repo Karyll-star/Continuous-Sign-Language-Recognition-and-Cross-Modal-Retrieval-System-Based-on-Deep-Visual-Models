@@ -49,11 +49,22 @@ app.add_middleware(
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Project/Back
 PARENT_ROOT = os.path.dirname(PROJECT_ROOT)  # Project
 REPO_ROOT = os.path.dirname(PARENT_ROOT)  # Shen（仓库根目录）
-DEFAULT_VIDEO_ROOT = os.path.join(REPO_ROOT, "dataset", "CE-CSL", "CE-CSL", "video")
-CECSL_VIDEO_ROOT = os.getenv("CECSL_VIDEO_ROOT", DEFAULT_VIDEO_ROOT)
+# 尝试两种可能的 CE-CSL 视频路径
+_candidates = [
+    os.path.join(REPO_ROOT, "dataset", "CE-CSL", "video"),         # 用户实际结构
+    os.path.join(REPO_ROOT, "dataset", "CE-CSL", "CE-CSL", "video"), # 旧硬编码路径
+    os.path.join(REPO_ROOT, "dataset", "CE-CSL", "CE-CSL", "CE-CSL", "video"),
+]
+_cecsl_found = None
+for _p in _candidates:
+    if os.path.isdir(_p):
+        _cecsl_found = _p
+        break
 
-if os.path.isdir(CECSL_VIDEO_ROOT):
-    # 挂载到 /cecsl/video，与后端 rag_index 中的默认 video_base_url 对齐
+DEFAULT_VIDEO_ROOT = _candidates[0]
+CECSL_VIDEO_ROOT = os.getenv("CECSL_VIDEO_ROOT", _cecsl_found or "")
+
+if CECSL_VIDEO_ROOT and os.path.isdir(CECSL_VIDEO_ROOT):
     app.mount(
         "/cecsl/video",
         StaticFiles(directory=CECSL_VIDEO_ROOT),
@@ -62,7 +73,7 @@ if os.path.isdir(CECSL_VIDEO_ROOT):
     print(f"[main] 已挂载本地 CE-CSL 视频目录: {CECSL_VIDEO_ROOT} -> /cecsl/video")
 else:
     print(
-        f"[main] 警告: 本地 CE-CSL 视频目录不存在: {CECSL_VIDEO_ROOT}，"
+        f"[main] 警告: 本地 CE-CSL 视频目录不存在，已尝试: {_candidates}，"
         "如需启用文本→视频播放，请设置环境变量 CECSL_VIDEO_ROOT"
     )
 

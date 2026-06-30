@@ -86,93 +86,50 @@
                 preload="metadata"
                 class="w-full h-full"
               ></video>
-              <div v-else class="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
-                <div class="text-center">
-                  <i class="bi bi-play-circle text-6xl text-white/70"></i>
-                  <p class="text-sm text-white/70 mt-2">选择右侧结果进行预览</p>
-                </div>
+              <div v-else class="w-full h-full flex items-center justify-center text-gray-500 text-sm">
+                点击右侧视频预览
               </div>
             </div>
-            <div class="p-4">
-              <div class="flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <p class="text-sm font-semibold text-primary-900 line-clamp-2">
-                    {{ activeItem?.sentence || '暂无预览' }}
-                  </p>
-                  <p v-if="activeItem?.gloss" class="text-xs text-gray-500 line-clamp-1 mt-1">
-                    {{ activeItem.gloss }}
-                  </p>
-                  <p v-if="activeItem?.videoPath" class="text-[11px] text-gray-400 truncate mt-1">
-                    {{ activeItem.videoPath }}
-                  </p>
-                </div>
-                <div v-if="activeItem && videoRagStore.hasResults" class="flex-shrink-0 text-right">
-                  <p class="text-xs text-gray-400">Top {{ activeItem.rank }} · {{ activeItem.split }}</p>
-                  <span
-                    class="inline-block mt-1 text-xs font-medium px-2 py-0.5 rounded-full"
-                    :class="getSimilarityBadgeClass(activeItem.similarity)"
-                  >
-                    匹配度 {{ Math.round(activeItem.similarity * 100) }}%
-                  </span>
-                </div>
+            <div v-if="activeItem" class="p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span
+                  v-if="videoRagStore.hasResults"
+                  class="text-xs font-medium px-2 py-0.5 rounded-full"
+                  :class="getSimilarityBadgeClass(activeItem.similarity)"
+                >
+                  匹配度 {{ Math.round(activeItem.similarity * 100) }}%
+                </span>
+                <span class="text-xs text-gray-400">{{ activeItem.split }}</span>
               </div>
+              <p class="text-sm text-primary-900 mb-1">{{ activeItem.sentence }}</p>
+              <p v-if="activeItem.gloss" class="text-[11px] text-gray-500">{{ activeItem.gloss }}</p>
+              <p class="text-[11px] text-gray-400 truncate mt-1">{{ activeItem.videoPath }}</p>
             </div>
           </div>
 
-          <!-- 右侧：列表 -->
-          <div class="rounded-2xl border border-gray-100 bg-white overflow-hidden">
-            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <div class="flex items-center gap-2 min-w-0">
-                <i :class="videoRagStore.hasResults ? 'bi bi-search' : 'bi bi-stars'" class="text-gray-400"></i>
-                <p class="text-sm font-medium text-gray-600 truncate">
-                  {{ videoRagStore.hasResults ? '检索结果' : '推荐示例（随机）' }}
-                </p>
-              </div>
+          <!-- 右侧：结果列表 -->
+          <div class="rounded-2xl border border-gray-100 bg-white overflow-hidden flex flex-col h-[480px]">
+            <div class="p-3 border-b border-gray-100 flex items-center justify-between">
+              <span class="text-xs font-medium text-gray-500">
+                {{ videoRagStore.hasResults ? `检索结果 (${listItems.length})` : `随机推荐 (${listItems.length})` }}
+              </span>
               <button
                 v-if="!videoRagStore.hasResults"
-                class="text-xs text-gray-400 hover:text-primary-900 flex items-center gap-1"
+                class="text-[11px] text-accent hover:text-accent/80 flex items-center gap-1"
                 @click="refreshRandomVideos"
-                :disabled="videoRagStore.randomLoading"
               >
-                <i class="bi bi-arrow-clockwise" :class="videoRagStore.randomLoading ? 'animate-spin' : ''"></i>
+                <i class="bi bi-arrow-clockwise text-xs"></i>
                 换一批
               </button>
             </div>
-
-            <div class="max-h-[520px] overflow-y-auto p-3 space-y-2">
-              <div
-                v-if="videoRagStore.randomLoading && !videoRagStore.hasResults"
-                class="py-10 text-center text-xs text-gray-400"
-              >
-                加载推荐中...
-              </div>
-
+            <div class="flex-1 overflow-y-auto">
               <button
                 v-for="item in listItems"
-                :key="item.id + '-' + item.rank"
-                type="button"
-                class="w-full text-left flex gap-3 p-3 rounded-xl transition-colors"
-                :class="activeItem?.id === item.id ? 'bg-accent/10' : 'bg-gray-50 hover:bg-gray-100'"
+                :key="item.id"
+                class="w-full text-left p-3 flex items-start gap-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0"
+                :class="{ 'bg-accent/5 border-l-2 border-l-accent': activeItem?.id === item.id }"
                 @click="setActive(item)"
               >
-                <div class="relative w-24 h-14 rounded-lg bg-gray-900 overflow-hidden flex-shrink-0">
-                  <video
-                    v-if="item.videoUrl"
-                    :src="resolveVideoUrl(item.videoUrl)"
-                    class="w-full h-full object-cover"
-                    preload="metadata"
-                    muted
-                  ></video>
-                  <div v-else class="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-800 to-gray-700">
-                    <i class="bi bi-play-circle text-xl text-white/80"></i>
-                  </div>
-                  <div class="absolute inset-0 flex items-center justify-center bg-black/10">
-                    <div class="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
-                      <i class="bi bi-play-fill text-primary-900 ml-0.5"></i>
-                    </div>
-                  </div>
-                </div>
-
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center justify-between gap-2 mb-1">
                     <span class="text-xs text-gray-400">
@@ -230,13 +187,13 @@ function resolveVideoUrl(raw: string): string {
   // 去掉开头的多余斜杠，避免重复
   const cleaned = raw.replace(/^\/+/, '')
 
-  // 只要包含 cecsl/video，一律走后端 9000 端口（不带 /api/v1 前缀）
+  // 只要包含 cecsl/video，一律走后端 8000 端口（不带 /api/v1 前缀）
   if (cleaned.toLowerCase().startsWith('cecsl/video')) {
-    return `http://localhost:9000/${cleaned}`
+    return `http://localhost:8000/${cleaned}`
   }
 
-  // 其他相对路径也按后端 9000 端口处理，防止被 Nuxt 当成页面路由
-  return `http://localhost:9000/${cleaned}`
+  // 其他相对路径也按后端 8000 端口处理，防止被 Nuxt 当成页面路由
+  return `http://localhost:8000/${cleaned}`
 }
 
 // 文本 → 视频 检索

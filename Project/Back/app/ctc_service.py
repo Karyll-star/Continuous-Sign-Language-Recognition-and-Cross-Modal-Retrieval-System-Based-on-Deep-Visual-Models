@@ -157,5 +157,3 @@ def recognize_image_file(image_path: str) -> Dict:
         f"text={sentence!r}, tokens_len={len(tokens)}"
     )
     return result
-
-
