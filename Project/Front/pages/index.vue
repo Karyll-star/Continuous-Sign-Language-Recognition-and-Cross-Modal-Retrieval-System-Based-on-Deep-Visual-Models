@@ -1,423 +1,538 @@
 <template>
-  <div class="pt-16 min-h-screen bg-slate-50 relative overflow-hidden">
-    <!-- 背景光晕 -->
-    <div class="pointer-events-none absolute inset-0 overflow-hidden">
-      <div
-        class="ambient-blob bg-teal-200/70 top-[-18rem] -left-32 w-[26rem] h-[26rem]"
-      ></div>
-      <div
-        class="ambient-blob bg-cyan-200/80 top-1/3 -right-40 w-[30rem] h-[30rem]"
-      ></div>
-      <div
-        class="ambient-blob bg-lime-200/70 bottom-[-14rem] left-1/4 w-[28rem] h-[28rem]"
-      ></div>
+  <div class="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800">
+    <!-- 顶部导航 -->
+    <div class="fixed top-0 left-0 right-0 z-40 bg-gray-900/80 backdrop-blur-lg border-b border-gray-800">
+      <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <h1 class="text-white font-semibold text-lg">🤟 译手 · 实时手语翻译</h1>
+        </div>
+        <div class="flex items-center gap-2">
+          <button 
+            class="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
+            @click="toggleFullscreen"
+            title="全屏"
+          >
+            <i class="bi bi-fullscreen"></i>
+          </button>
+          <button 
+            class="p-2 text-gray-400 hover:text-white transition-colors rounded-full hover:bg-gray-800"
+            @click="shareResult"
+            title="分享"
+          >
+            <i class="bi bi-share"></i>
+          </button>
+        </div>
+      </div>
     </div>
 
-    <main class="relative z-10">
-      <!-- Hero + 体验入口 -->
-      <section class="hero-section">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-20">
-          <div
-            class="grid lg:grid-cols-[1.05fr_minmax(0,0.95fr)] gap-10 lg:gap-14 items-center"
-          >
-            <!-- 左侧文案 -->
-            <div class="space-y-8 fade-in-up">
-              <div
-                class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-50/80 text-teal-700 text-xs sm:text-sm font-medium border border-teal-100/80 shadow-[0_8px_22px_rgba(15,118,110,0.06)]"
-              >
-                <span
-                  class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-teal-500/10 text-teal-700"
-                >
-                  <i class="bi bi-stars text-sm"></i>
-                </span>
-                HandTalk AI · 为听障群体打造的手语翻译助手
-              </div>
+    <!-- 摄像头区域 -->
+    <div class="relative h-[calc(100vh-8rem)] bg-gray-900 overflow-hidden">
+      <!-- 视频层 -->
+      <video
+        ref="videoRef"
+        class="absolute inset-0 w-full h-full object-cover"
+        :class="{ 'scale-x-[-1]': camera.isMirrored.value }"
+        autoplay
+        playsinline
+        muted
+      ></video>
 
-              <div class="space-y-4">
-                <h1
-                  class="text-3.5xl sm:text-4xl md:text-5xl lg:text-[3.2rem] font-bold tracking-tight text-slate-900 leading-tight"
-                >
-                  让
-                  <span
-                    class="bg-gradient-to-r from-teal-500 via-cyan-500 to-lime-500 bg-clip-text text-transparent"
-                  >
-                    手语翻译
-                  </span>
-                  像呼吸一样自然
-                </h1>
-                <p
-                  class="text-base sm:text-lg text-slate-600 max-w-xl leading-relaxed"
-                >
-                  一款为中国听障人士量身打造的
-                  AI 手语翻译工具，支持实时识别、图片序列与视频翻译，
-                  用科技让每一次沟通都被温柔接住。
-                </p>
-              </div>
+      <!-- 骨架叠加层（Canvas） -->
+      <canvas
+        ref="skeletonCanvasRef"
+        class="absolute inset-0 w-full h-full pointer-events-none"
+      ></canvas>
 
-              <!-- 主要操作入口 -->
-              <div class="space-y-4">
+      <!-- 背景装饰 -->
+      <div class="absolute inset-0 pointer-events-none">
+        <!-- 角落装饰 -->
+        <div class="absolute top-4 left-4 w-12 h-12 border-l-2 border-t-2 border-white/30 rounded-tl-lg"></div>
+        <div class="absolute top-4 right-4 w-12 h-12 border-r-2 border-t-2 border-white/30 rounded-tr-lg"></div>
+        <div class="absolute bottom-4 left-4 w-12 h-12 border-l-2 border-b-2 border-white/30 rounded-bl-lg"></div>
+        <div class="absolute bottom-4 right-4 w-12 h-12 border-r-2 border-b-2 border-white/30 rounded-br-lg"></div>
+        
+        <!-- 渐变遮罩 -->
+        <div class="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-transparent to-gray-900/30"></div>
+      </div>
+
+      <!-- 状态指示器 -->
+      <div class="absolute top-20 left-4 right-4">
+        <!-- 录制状态 -->
+        <div v-if="recognitionStore.isRecording" class="flex items-center gap-3 mb-4">
+          <div class="flex items-center gap-2 px-3 py-1.5 bg-red-500/20 rounded-full">
+            <span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+            <span class="text-red-400 text-sm font-medium">实时识别中</span>
+          </div>
+          <div class="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-full">
+            <i class="bi bi-clock text-white/60"></i>
+            <span class="text-white/80 text-sm">{{ recordingDuration }}</span>
+          </div>
+        </div>
+
+        <!-- 置信度指示器 -->
+        <div class="bg-gray-900/60 backdrop-blur-lg rounded-2xl p-4">
+          <div class="flex items-center gap-3">
+            <div class="flex-1">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-white/60 text-xs">置信度</span>
+                <span class="text-white font-medium">{{ Math.round(recognitionStore.confidence) }}%</span>
+              </div>
+              <div class="h-2 bg-white/10 rounded-full overflow-hidden">
                 <div
-                  class="flex flex-wrap items-center gap-3 sm:gap-4 fade-in-up delay-100"
-                >
-                  <NuxtLink
-                    to="/recognize"
-                    class="inline-flex items-center justify-center px-5 sm:px-6 py-3 rounded-full text-sm sm:text-base font-medium text-white bg-gradient-to-r from-teal-500 via-cyan-500 to-lime-500 shadow-[0_12px_30px_rgba(34,197,158,0.35)] hover:shadow-[0_16px_40px_rgba(34,197,158,0.4)] hover:brightness-105 active:scale-[0.98] transition-all"
-                  >
-                    <i class="bi bi-camera-video mr-2 text-sm sm:text-base"></i>
-                                      
-                  </NuxtLink>
-                  <NuxtLink
-                    to="/translate"
-                    class="inline-flex items-center justify-center px-4 sm:px-5 py-3 rounded-full text-sm sm:text-base font-medium text-teal-900 bg-white/70 border border-white/80 shadow-[0_10px_28px_rgba(15,23,42,0.06)] hover:bg-white/90 hover:border-teal-200 hover:shadow-[0_16px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-all"
-                  >
-                    <i class="bi bi-images mr-2 text-sm sm:text-base"></i>
-                    图片序列翻译
-                  </NuxtLink>
-                  <NuxtLink
-                    to="/video-translate"
-                    class="inline-flex items-center justify-center px-4 sm:px-5 py-3 rounded-full text-sm sm:text-base font-medium text-teal-900/90 hover:text-teal-900 border border-teal-100 bg-teal-50/60 hover:bg-teal-50 shadow-[0_8px_24px_rgba(13,148,136,0.08)] hover:shadow-[0_14px_38px_rgba(13,148,136,0.16)] backdrop-blur-xl transition-all"
-                  >
-                    <i class="bi bi-film mr-2 text-sm sm:text-base"></i>
-                    视频翻译
-                  </NuxtLink>
-                </div>
-                <p class="text-xs sm:text-sm text-slate-500">
-                  无需登录，直接体验 · 建议在自然光线环境下拍摄，效果更佳
-                </p>
-              </div>
-
-              <!-- 小统计 -->
-              <div
-                class="flex flex-wrap items-center gap-6 text-xs sm:text-sm text-slate-500 fade-in-up delay-150"
-              >
-                <div class="flex items-center gap-2">
-                  <span
-                    class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600"
-                  >
-                    <i class="bi bi-activity"></i>
-                  </span>
-                  <span> 实时识别 · 毫秒级响应 </span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span
-                    class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-600"
-                  >
-                    <i class="bi bi-shield-check"></i>
-                  </span>
-                  <span> 本地预览 · 云端计算更安全 </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 右侧“卡片组合”：上传 / 结果 / 建议（玻璃效果） -->
-            <div class="relative fade-in-up delay-75">
-              <div
-                class="glass-card relative rounded-3xl p-5 sm:p-6 lg:p-7 space-y-5 shadow-[0_18px_60px_rgba(15,23,42,0.12)]"
-              >
-                <!-- 顶部：模拟上传区 -->
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <div
-                        class="h-9 w-9 rounded-2xl bg-teal-500/10 flex items-center justify-center text-teal-600"
-                      >
-                        <i class="bi bi-cloud-arrow-up"></i>
-                      </div>
-                      <div>
-                        <p class="text-xs uppercase tracking-wide text-slate-400">
-                          Upload Area
-                        </p>
-                        <p class="text-sm font-medium text-slate-800">
-                          上传手语图片 / 视频
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      class="inline-flex items-center gap-1 rounded-full border border-emerald-100 bg-emerald-50/70 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
-                    >
-                      <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                      安全加密
-                    </span>
-                  </div>
-
-                  <div
-                    class="group mt-2 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-teal-200/70 bg-white/60 px-4 py-6 text-center text-xs sm:text-sm text-slate-500 hover:bg-white/80 hover:border-teal-300 hover:shadow-[0_14px_40px_rgba(34,197,158,0.16)] transition-all backdrop-blur-2xl"
-                  >
-                    <i
-                      class="bi bi-upload mb-2 text-lg sm:text-xl text-teal-500/80 group-hover:text-teal-600"
-                    ></i>
-                    <p class="font-medium text-slate-700 mb-1">
-                      拖拽图片 / 视频到这里，或点击选择文件
-                    </p>
-                    <p class="text-[11px] sm:text-xs text-slate-400">
-                      支持 MP4 / JPG / PNG 等常见格式，单次上传不超过 60 秒视频
-                    </p>
-                  </div>
-                </div>
-
-                <!-- 中部：模拟识别结果区 -->
-                <div
-                  class="rounded-2xl border border-white/80 bg-white/65 px-4 py-3.5 backdrop-blur-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)]"
-                >
-                  <div class="flex items-center justify-between mb-2">
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-cyan-500/10 text-cyan-600"
-                      >
-                        <i class="bi bi-translate"></i>
-                      </span>
-                      <p class="text-xs font-medium text-slate-500">
-                        识别结果（示意）
-                      </p>
-                    </div>
-                    <span class="text-xs text-emerald-600 font-semibold">
-                      96% 置信度
-                    </span>
-                  </div>
-                  <p
-                    class="text-sm sm:text-base font-medium text-slate-900 leading-relaxed"
-                  >
-                    你好，我想预约下周三上午的挂号。
-                  </p>
-                  <p class="mt-1.5 text-[11px] sm:text-xs text-slate-500">
-                    拼音：nǐ hǎo，wǒ xiǎng yùyuē xià zhōusān shàngwǔ de guàhào。
-                  </p>
-                </div>
-
-                <!-- 底部：建议 / 使用提示 -->
-                <div
-                  class="rounded-2xl border border-white/80 bg-white/55 px-4 py-3.5 backdrop-blur-2xl flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div class="flex items-start gap-2.5">
-                    <span
-                      class="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-lime-500/10 text-lime-600"
-                    >
-                      <i class="bi bi-lightbulb"></i>
-                    </span>
-                    <div>
-                      <p class="text-xs sm:text-sm font-medium text-slate-800">
-                        建议：保持单色背景与稳定光线，识别更准确
-                      </p>
-                      <p class="mt-0.5 text-[11px] text-slate-500">
-                        如果是对话场景，可使用
-                        <span class="font-medium text-teal-600">实时翻译</span>
-                        模式；长视频内容推荐使用
-                        <span class="font-medium text-teal-600">视频翻译</span>
-                        模式。
-                      </p>
-                    </div>
-                  </div>
-                  <NuxtLink
-                    to="/about"
-                    class="mt-1 inline-flex items-center justify-center rounded-full border border-teal-100 bg-teal-50/60 px-3.5 py-1.5 text-[11px] font-medium text-teal-800 hover:bg-teal-100/80 hover:border-teal-200 hover:text-teal-900 transition-all"
-                  >
-                    <i class="bi bi-info-circle mr-1.5"></i>
-                    了解使用建议
-                  </NuxtLink>
-                </div>
+                  class="h-full rounded-full transition-all duration-300"
+                  :class="confidenceClass"
+                  :style="{ width: `${recognitionStore.confidence}%` }"
+                ></div>
               </div>
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
-      <!-- 适用场景 -->
-      <section class="py-12 sm:py-16 lg:py-18">
-        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div class="text-center mb-10 fade-in-up">
-            <h2
-              class="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 mb-3"
+      <!-- 加载状态 -->
+      <div
+        v-if="loading"
+        class="absolute inset-0 flex items-center justify-center bg-gray-900/90 backdrop-blur-sm"
+      >
+        <div class="text-center">
+          <div class="relative w-20 h-20 mx-auto mb-4">
+            <svg class="w-20 h-20 transform -rotate-90">
+              <circle
+                class="text-gray-700"
+                stroke-width="4"
+                stroke="currentColor"
+                fill="transparent"
+                :r="36"
+                :cx="40"
+                :cy="40"
+              />
+              <circle 
+                class="text-accent animate-spin"
+                stroke-width="4"
+                stroke="currentColor"
+                fill="transparent"
+                :r="36"
+                :cx="40"
+                :cy="40"
+                stroke-dasharray="226.19"
+                stroke-dashoffset="50"
+                style="animation: dash 1.5s ease-in-out infinite;"
+              />
+            </svg>
+            <div class="absolute inset-0 flex items-center justify-center">
+              <i class="bi bi-camera-video text-2xl text-accent"></i>
+            </div>
+          </div>
+          <p class="text-white text-lg mb-2">正在启动摄像头</p>
+          <p class="text-gray-400 text-sm">请确保摄像头权限已开启</p>
+        </div>
+      </div>
+
+      <!-- 错误提示 -->
+      <div
+        v-if="camera.error.value"
+        class="absolute inset-0 flex items-center justify-center bg-gray-900/95 backdrop-blur-sm"
+      >
+        <div class="text-center px-4 max-w-sm">
+          <div class="w-20 h-20 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+            <i class="bi bi-camera-video-off text-4xl text-red-500"></i>
+          </div>
+          <p class="text-white text-lg mb-2">摄像头访问失败</p>
+          <p class="text-gray-400 text-sm mb-6">{{ camera.error.value }}</p>
+          <button class="btn btn-secondary rounded-full" @click="initCamera">
+            <i class="bi bi-arrow-clockwise mr-2"></i>
+            重新尝试
+          </button>
+        </div>
+      </div>
+
+      <!-- 操作提示 -->
+      <div 
+        v-if="!recognitionStore.isRecording && !loading && !camera.error.value"
+        class="absolute inset-0 flex items-center justify-center"
+      >
+        <div class="text-center">
+          <div class="w-24 h-24 mx-auto mb-4 rounded-full bg-white/10 backdrop-blur-lg flex items-center justify-center">
+            <i class="bi bi-play-fill text-4xl text-white"></i>
+          </div>
+          <p class="text-white/80 text-lg mb-2">点击下方按钮开始识别</p>
+          <p class="text-gray-500 text-sm">将手语动作对准摄像头</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 控制栏 -->
+    <div class="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-gray-900 to-gray-900/80 backdrop-blur-xl pb-8 pt-4 px-4">
+      <div class="max-w-md mx-auto">
+        <div class="flex items-center justify-center gap-4">
+          <!-- 镜像切换 -->
+          <button
+            class="w-12 h-12 rounded-full flex items-center justify-center transition-all"
+            :class="camera.isMirrored.value ? 'bg-white text-gray-900' : 'bg-white/10 text-white hover:bg-white/20'"
+            @click="camera.toggleMirror()"
+            title="镜像切换"
+          >
+            <i class="bi bi-arrow-left-right"></i>
+          </button>
+
+          <!-- 主录制按钮 -->
+          <button
+            class="w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all transform hover:scale-105"
+            :class="recognitionStore.isRecording 
+              ? 'bg-red-500 text-white shadow-red-500/30 animate-pulse' 
+              : 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-blue-500/30'"
+            @click="toggleRecording"
+          >
+            <i :class="recognitionStore.isRecording ? 'bi bi-stop-fill' : 'bi bi-play-fill'" class="text-2xl"></i>
+          </button>
+
+          <!-- 拍照按钮 -->
+          <button
+            class="w-12 h-12 rounded-full flex items-center justify-center transition-all bg-white/10 text-white hover:bg-white/20"
+            @click="captureAndSave"
+            title="拍照"
+            :disabled="!recognitionStore.isRecording"
+          >
+            <i class="bi bi-camera"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 识别结果面板 -->
+    <div 
+      class="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl shadow-2xl z-20 transition-transform duration-300"
+      :class="showResultPanel ? 'translate-y-0' : 'translate-y-full'"
+    >
+      <!-- 拖拽指示器 -->
+      <div 
+        class="flex justify-center py-3 cursor-pointer z-30"
+        @click="toggleResultPanel"
+      >
+        <div class="w-16 h-1.5 bg-gray-300 rounded-full"></div>
+      </div>
+
+      <div class="max-w-2xl mx-auto px-4 pb-8">
+        <div v-if="recognitionStore.hasResult" class="animate-fade-in">
+          <!-- 头部信息 -->
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <span class="text-sm text-gray-500">{{ currentTime }}</span>
+              <span 
+                class="badge rounded-full px-3 py-1"
+                :class="confidenceBadgeClass"
+              >
+                {{ Math.round(recognitionStore.confidence) }}% 置信度
+              </span>
+            </div>
+            <span class="badge badge-success rounded-full">已识别</span>
+          </div>
+
+          <!-- 识别结果 -->
+          <div class="mb-6">
+            <h3 class="text-3xl font-bold text-primary-900 mb-2">
+              {{ recognitionStore.latestResult?.text }}
+            </h3>
+            <p class="text-lg text-gray-500">{{ recognitionStore.latestResult?.pinyin }}</p>
+            <p class="text-gray-600 mt-2">{{ recognitionStore.latestResult?.meaning }}</p>
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="grid grid-cols-4 gap-3">
+            <button
+              class="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+              @click="playVoice"
             >
-              在真实场景中，让沟通变得更轻松
-            </h2>
-            <p class="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto">
-              医院问诊、银行办理业务、家庭日常沟通……HandTalk
-              希望在你需要的时候，悄悄站在你身后。
-            </p>
-          </div>
-
-          <div
-            class="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6 fade-in-up delay-75"
-          >
-            <div class="scene-card glass-card p-6 sm:p-7">
-              <div
-                class="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-400 to-cyan-400 flex items-center justify-center mb-5 shadow-[0_12px_30px_rgba(34,197,194,0.35)]"
-              >
-                <i class="bi bi-hospital text-xl text-white"></i>
-              </div>
-              <h3 class="text-lg font-semibold text-slate-900 mb-2">
-                医疗服务场景
-              </h3>
-              <p class="text-sm text-slate-600 leading-relaxed">
-                帮助听障患者在问诊、检查、取药等环节准确表达需求，减轻医患双方的沟通压力。
-              </p>
-            </div>
-
-            <div class="scene-card glass-card p-6 sm:p-7">
-              <div
-                class="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-lime-400 flex items-center justify-center mb-5 shadow-[0_12px_30px_rgba(52,211,153,0.35)]"
-              >
-                <i class="bi bi-bank text-xl text-white"></i>
-              </div>
-              <h3 class="text-lg font-semibold text-slate-900 mb-2">
-                金融与公共服务
-              </h3>
-              <p class="text-sm text-slate-600 leading-relaxed">
-                在银行、政务大厅、车站等窗口场景辅助沟通，提升服务效率，让办理流程更顺畅。
-              </p>
-            </div>
-
-            <div class="scene-card glass-card p-6 sm:p-7">
-              <div
-                class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-400 flex items-center justify-center mb-5 shadow-[0_12px_30px_rgba(16,185,129,0.35)]"
-              >
-                <i class="bi bi-house-heart text-xl text-white"></i>
-              </div>
-              <h3 class="text-lg font-semibold text-slate-900 mb-2">
-                家庭与校园沟通
-              </h3>
-              <p class="text-sm text-slate-600 leading-relaxed">
-                轻松覆盖家庭日常、课堂交流等高频沟通场景，让理解与陪伴变得更加自然。
-              </p>
-            </div>
+              <i class="bi bi-volume-up text-xl text-blue-500"></i>
+              <span class="text-xs text-gray-600">播放</span>
+            </button>
+            <button
+              class="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+              @click="copyResult"
+            >
+              <i class="bi bi-clipboard text-xl text-green-500"></i>
+              <span class="text-xs text-gray-600">复制</span>
+            </button>
+            <button
+              class="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+              @click="saveToCollection"
+            >
+              <i class="bi bi-bookmark text-xl text-purple-500"></i>
+              <span class="text-xs text-gray-600">收藏</span>
+            </button>
+            <button
+              class="flex flex-col items-center gap-1 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors"
+              @click="shareResult"
+            >
+              <i class="bi bi-share text-xl text-orange-500"></i>
+              <span class="text-xs text-gray-600">分享</span>
+            </button>
           </div>
         </div>
-      </section>
-    </main>
+
+        <div v-else class="text-center py-8">
+          <i class="bi bi-hand-index text-5xl text-gray-200 mb-3"></i>
+          <p class="text-gray-500">
+            {{ recognitionStore.isRecording ? '正在识别手语...' : '开始识别后显示结果' }}
+          </p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useSpeech } from '~/composables/useSpeech'
+import { useRecognitionWebSocket } from '~/composables/useWebSocket'
+
 // SEO 元信息
 useSeoMeta({
-  title: '译手 HandTalk AI - 让沟通无障碍',
-  description:
-    '面向中国市场的 AI 手语翻译应用，用科技传递人文关怀，消除听障人士与健听人之间的沟通障碍。',
-  ogTitle: '译手 HandTalk AI - 让沟通无障碍',
-  ogDescription: '面向中国市场的 AI 手语翻译应用',
+  title: '译手 HandTalk AI - 实时手语翻译',
+  description: '摄像头实时捕获手语动作，即时转换为文字',
+})
+
+// 组件引用
+const videoRef = ref<HTMLVideoElement | null>(null)
+const skeletonCanvasRef = ref<HTMLCanvasElement | null>(null)
+
+// Composables
+const camera = useCamera()
+const recognitionStore = useRecognitionStore()
+const toast = useToast()
+const speech = useSpeech()
+const ws = useRecognitionWebSocket()
+
+// 状态
+const loading = ref(true)
+const showResultPanel = ref(false)
+const recordingDuration = ref('00:00')
+let lastCaptureTime = 0
+let animationFrameId: number | null = null
+let durationInterval: ReturnType<typeof setInterval> | null = null
+
+// 计算属性
+const confidenceClass = computed(() => {
+  const confidence = recognitionStore.confidence
+  if (confidence >= 80) return 'bg-gradient-to-r from-green-500 to-emerald-500'
+  if (confidence >= 60) return 'bg-gradient-to-r from-yellow-500 to-orange-500'
+  return 'bg-gradient-to-r from-red-500 to-pink-500'
+})
+
+const confidenceBadgeClass = computed(() => {
+  const confidence = recognitionStore.confidence
+  if (confidence >= 80) return 'bg-green-100 text-green-700'
+  if (confidence >= 60) return 'bg-yellow-100 text-yellow-700'
+  return 'bg-red-100 text-red-700'
+})
+
+// 当前时间（仅客户端，避免 SSR 报错）
+const currentTime = ref('')
+onMounted(() => {
+  currentTime.value = new Date().toLocaleTimeString()
+  setInterval(() => {
+    currentTime.value = new Date().toLocaleTimeString()
+  }, 1000)
+})
+
+// 格式化时长
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+// 切换结果面板
+function toggleResultPanel() {
+  showResultPanel.value = !showResultPanel.value
+}
+
+// 切换全屏
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen()
+  } else {
+    document.exitFullscreen()
+  }
+}
+
+// 初始化摄像头
+async function initCamera() {
+  loading.value = true
+  const videoEl = videoRef.value
+  if (!videoEl) {
+    await nextTick()
+    if (!videoRef.value) {
+      camera.error.value = '视频元素未能正确加载，请刷新页面重试'
+      loading.value = false
+      return
+    }
+  }
+  try {
+    await camera.startCamera(videoRef.value as HTMLVideoElement)
+  } catch (error) {
+    console.error('Camera initialization failed:', error)
+    camera.error.value = (error as Error).message || '摄像头初始化失败'
+  }
+  loading.value = false
+}
+
+// 切换录制状态
+async function toggleRecording() {
+  if (recognitionStore.isRecording) {
+    // 停止录制
+    recognitionStore.setRecording(false)
+    ws.disconnect()
+    camera.stopCamera()
+
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId)
+    }
+    if (durationInterval) {
+      clearInterval(durationInterval)
+    }
+    recordingDuration.value = '00:00'
+  } else {
+    // 开始录制
+    await initCamera()
+    if (camera.error.value) {
+      toast.error(camera.error.value)
+      return
+    }
+
+    // 建立 WebSocket 连接
+    ws.connect()
+    recognitionStore.setRecording(true)
+    startCaptureLoop()
+
+    // 开始计时
+    let seconds = 0
+    durationInterval = setInterval(() => {
+      seconds++
+      recordingDuration.value = formatDuration(seconds)
+    }, 1000)
+  }
+}
+
+// 开始捕获循环（通过 WebSocket 发送帧）
+function startCaptureLoop() {
+  function capture() {
+    if (recognitionStore.isRecording && videoRef.value) {
+      const now = Date.now()
+      const intervalMs = 250
+
+      if (now - lastCaptureTime >= intervalMs) {
+        const frameData = camera.captureFrame()
+        if (frameData) {
+          lastCaptureTime = now
+          ws.sendFrame(frameData)
+          showResultPanel.value = true
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(capture)
+    }
+  }
+
+  capture()
+}
+
+// 播放语音
+function playVoice() {
+  const text = recognitionStore.latestResult?.text
+  if (text) {
+    speech.speak(text)
+  }
+}
+
+// 复制结果
+function copyResult() {
+  const text = recognitionStore.latestResult?.text
+  if (text) {
+    navigator.clipboard.writeText(text)
+    toast.success('已复制到剪贴板')
+  }
+}
+
+// 分享结果
+function shareResult() {
+  const text = recognitionStore.latestResult?.text
+  if (text) {
+    const shareData = {
+      title: '译手 HandTalk AI - 实时翻译结果',
+      text: `手语识别结果：${text}`,
+    }
+
+    if (navigator.share) {
+      navigator.share(shareData)
+    } else {
+      navigator.clipboard.writeText(shareData.text)
+      toast.success('分享内容已复制')
+    }
+  }
+}
+
+// 保存到收藏
+function saveToCollection() {
+  toast.success('已添加到收藏')
+}
+
+// 拍照保存
+function captureAndSave() {
+  if (!recognitionStore.isRecording) {
+    toast.warning('请先开始识别')
+    return
+  }
+  
+  const frameData = camera.captureFrame()
+  if (frameData) {
+    recognitionStore.addToHistory({
+      id: Date.now().toString(),
+      type: 'realtime',
+      thumbnail: frameData,
+      result: recognitionStore.latestResult?.text || '',
+      confidence: recognitionStore.latestResult?.confidence || 0,
+      createdAt: new Date().toISOString(),
+    })
+
+    toast.success('已保存到历史记录')
+  }
+}
+
+// 页面加载后自动请求摄像头
+onMounted(() => {
+  initCamera()
+})
+
+// 页面卸载时清理
+onUnmounted(() => {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId)
+  }
+  if (durationInterval) {
+    clearInterval(durationInterval)
+  }
+  ws.disconnect()
+  camera.stopCamera()
 })
 </script>
 
 <style scoped>
-.hero-section {
-  min-height: calc(80vh - 4rem);
-  display: flex;
-  align-items: center;
-}
-
-.glass-card {
-  position: relative;
-  border-radius: 1.5rem;
-  background: rgba(255, 255, 255, 0.68);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(26px);
-  -webkit-backdrop-filter: blur(26px);
-  transition: background 0.25s ease, border-color 0.25s ease,
-    box-shadow 0.25s ease, transform 0.2s ease;
-}
-
-.glass-card:hover {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(45, 212, 191, 0.6);
-  box-shadow: 0 18px 60px rgba(34, 197, 158, 0.25);
-  transform: translateY(-2px);
-}
-
-.ambient-blob {
-  position: relative;
-  border-radius: 999px;
-  filter: blur(80px);
-  opacity: 0.7;
-}
-
-.ambient-blob::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(
-    circle at 20% 20%,
-    rgba(255, 255, 255, 0.8),
-    transparent 60%
-  );
-  mix-blend-mode: screen;
-}
-
-.scene-card {
-  position: relative;
-  overflow: hidden;
-  border-radius: 1.5rem;
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  transition: transform 0.2s ease, box-shadow 0.25s ease,
-    background 0.25s ease, border-color 0.25s ease;
-}
-
-.scene-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    circle at 0% 0%,
-    rgba(45, 212, 191, 0.1),
-    transparent 55%
-  );
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  pointer-events: none;
-}
-
-.scene-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 18px 55px rgba(15, 23, 42, 0.14);
-  background: rgba(255, 255, 255, 0.95);
-  border-color: rgba(45, 212, 191, 0.6);
-}
-
-.scene-card:hover::before {
-  opacity: 1;
-}
-
-/* 初次加载浮现动画 */
-.fade-in-up {
-  opacity: 0;
-  transform: translateY(10px);
-  animation: fadeInUp 0.7s cubic-bezier(0.19, 1, 0.22, 1) forwards;
-}
-
-.fade-in-up.delay-75 {
-  animation-delay: 0.15s;
-}
-
-.fade-in-up.delay-100 {
-  animation-delay: 0.2s;
-}
-
-.fade-in-up.delay-150 {
-  animation-delay: 0.3s;
-}
-
-@keyframes fadeInUp {
+@keyframes dash {
   0% {
-    opacity: 0;
-    transform: translateY(14px);
+    stroke-dasharray: 1, 150;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -35;
   }
   100% {
-    opacity: 1;
-    transform: translateY(0);
+    stroke-dasharray: 90, 150;
+    stroke-dashoffset: -124;
   }
 }
 
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .hero-section {
-    min-height: auto;
-    padding-top: 1.75rem;
-    padding-bottom: 1.75rem;
-  }
+.animate-spin {
+  animation: dash 1.5s ease-in-out infinite;
 }
 </style>
-

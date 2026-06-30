@@ -12,7 +12,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: '译手 HandTalk AI - 让沟通无障碍',
+      title: '译手 HandTalk AI - 实时手语翻译',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },

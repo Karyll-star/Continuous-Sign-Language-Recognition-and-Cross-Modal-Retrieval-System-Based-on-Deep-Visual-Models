@@ -1,15 +1,9 @@
 <template>
   <div class="min-h-screen flex flex-col">
-    <!-- 顶部导航 -->
-    <TheHeader />
-
-    <!-- 主内容区 -->
+    <!-- 主内容区（全屏，无头部/底部导航） -->
     <main class="flex-1">
       <slot />
     </main>
-
-    <!-- 底部 -->
-    <TheFooter />
 
     <!-- Toast 提示 -->
     <Toast />
@@ -17,7 +11,5 @@
 </template>
 
 <script setup lang="ts">
-// 默认布局
+// 默认布局 - 仅保留 Toast，无 Header / Footer
 </script>
-
-
